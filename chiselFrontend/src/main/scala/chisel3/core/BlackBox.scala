@@ -27,15 +27,15 @@ case class RawParam(value: String) extends Param
   * }}}
   * @note The parameters API is experimental and may change
   */
-abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param]) extends Module {
-
+abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param]) extends BaseModule {
+  def io: Record
   // The body of a BlackBox is empty, the real logic happens in firrtl/Emitter.scala
   // Bypass standard clock, reset, io port declaration by flattening io
   // TODO(twigg): ? Really, overrides are bad, should extend BaseModule....
   override private[core] def ports = io.elements.toSeq
 
   // Do not do reflective naming of internal signals, just name io
-  override private[core] def setRefs(): this.type = {
+  override private[core] def close(): this.type = {
     // setRef is not called on the actual io.
     // There is a risk of user improperly attempting to connect directly with io
     // Long term solution will be to define BlackBox IO differently as part of
@@ -53,19 +53,4 @@ abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param
     }
     this
   }
-
-  // Don't setup clock, reset
-  // Cann't invalide io in one bunch, must invalidate each part separately
-  override private[core] def setupInParent(implicit sourceInfo: SourceInfo): this.type = _parent match {
-    case Some(p) => {
-      // Just init instance inputs
-      for((_,port) <- ports) pushCommand(DefInvalid(sourceInfo, port.ref))
-      this
-    }
-    case None => this
-  }
-
-  // Using null is horrible but these signals SHOULD NEVER be used:
-  override val clock = null
-  override val reset = null
 }

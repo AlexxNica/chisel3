@@ -68,7 +68,7 @@ trait InstanceId {
 
 private[chisel3] trait HasId extends InstanceId {
   private[chisel3] def _onModuleClose: Unit = {} // scalastyle:ignore method.name
-  private[chisel3] val _parent: Option[Module] = Builder.currentModule
+  private[chisel3] val _parent: Option[BaseModule] = Builder.currentModule
   _parent.foreach(_.addId(this))
 
   private[chisel3] val _id: Long = Builder.idGen.next
@@ -146,7 +146,7 @@ private[chisel3] class DynamicContext() {
   val globalNamespace = new Namespace(None, Set())
   val components = ArrayBuffer[Component]()
   val annotations = ArrayBuffer[ChiselAnnotation]()
-  var currentModule: Option[Module] = None
+  var currentModule: Option[BaseModule] = None
   // Set by object Module.apply before calling class Module constructor
   // Used to distinguish between no Module() wrapping, multiple wrappings, and rewrapping
   var readyForModuleConstr: Boolean = false
@@ -166,16 +166,47 @@ private[chisel3] object Builder {
   def annotations: ArrayBuffer[ChiselAnnotation] = dynamicContext.annotations
   def namingStack: internal.naming.NamingStack = dynamicContext.namingStack
 
-  def currentModule: Option[Module] = dynamicContext.currentModule
-  def currentModule_=(target: Option[Module]): Unit = {
+  def currentModule: Option[BaseModule] = dynamicContext.currentModule
+  def currentModule_=(target: Option[BaseModule]): Unit = {
     dynamicContext.currentModule = target
   }
-  def forcedModule: Module = currentModule match {
+  def forcedModule: BaseModule = currentModule match {
     case Some(module) => module
     case None => throwException(
       "Error: Not in a Module. Likely cause: Missed Module() wrap or bare chisel API call."
       // A bare api call is, e.g. calling Wire() from the scala console).
     )
+  }
+  def forcedUserModule: UserModule = currentModule match {
+    case Some(module: UserModule) => module
+    case None => throwException(
+      "Error: Not in a UserModule. Likely cause: Missed Module() wrap, bare chisel API call, or attempting to construct hardware inside a BlackBox."
+      // A bare api call is, e.g. calling Wire() from the scala console).
+    )
+  }
+  def forcedClock: Clock = {
+    forcedModule match {
+      case module: ImplicitModule => module.clock
+      case _ => throwException("No clock in current context")
+    }
+  }
+  def forcedReset: Bool = {
+    forcedModule match {
+      case module: ImplicitModule => module.reset
+      case _ => throwException("No reset in current context")
+    }
+  }
+  def getClock: Option[Clock] = {
+    currentModule match {
+      case Some(module: ImplicitModule) => Some(module.clock)
+      case _ => None
+    }
+  }
+  def getReset: Option[Bool] = {
+    currentModule match {
+      case Some(module: ImplicitModule) => Some(module.reset)
+      case _ => None
+    }
   }
   def readyForModuleConstr: Boolean = dynamicContext.readyForModuleConstr
   def readyForModuleConstr_=(target: Boolean): Unit = {
@@ -185,15 +216,12 @@ private[chisel3] object Builder {
   // TODO(twigg): Ideally, binding checks and new bindings would all occur here
   // However, rest of frontend can't support this yet.
   def pushCommand[T <: Command](c: T): T = {
-    forcedModule match {
-      case _: BlackBox => throwException("Cannot add hardware to a BlackBox")
-      case m => m._commands += c
-    }
+    forcedUserModule.addCommand(c)
     c
   }
   def pushOp[T <: Data](cmd: DefPrim[T]): T = {
     // Bind each element of the returned Data to being a Op
-    Binding.bind(cmd.id, OpBinder(forcedModule), "Error: During op creation, fresh result")
+    Binding.bind(cmd.id, OpBinder(forcedUserModule), "Error: During op creation, fresh result")
     pushCommand(cmd).id
   }
 
@@ -212,7 +240,7 @@ private[chisel3] object Builder {
     throwException(m)
   }
 
-  def build[T <: Module](f: => T): Circuit = {
+  def build[T <: UserModule](f: => T): Circuit = {
     dynamicContextVar.withValue(Some(new DynamicContext())) {
       errors.info("Elaborating design...")
       val mod = f

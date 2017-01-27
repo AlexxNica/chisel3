@@ -160,8 +160,27 @@ package object Chisel {     // scalastyle:ignore package.object.name
   val SeqMem = chisel3.core.SeqMem
   type SeqMem[T <: Data] = chisel3.core.SeqMem[T]
 
+  import chisel3.core.CompileOptions
+  abstract class CompatibilityModule(
+      override_clock: Option[Clock]=None, override_reset: Option[Bool]=None)
+      (implicit moduleCompileOptions: CompileOptions)
+      extends chisel3.core.ImplicitModule(override_clock, override_reset) {
+    // _clock and _reset can be clock and reset in these 2ary constructors
+    // once chisel2 compatibility issues are resolved
+    def this(_clock: Clock)(implicit moduleCompileOptions: CompileOptions) = this(Option(_clock), None)(moduleCompileOptions)
+    def this(_reset: Bool)(implicit moduleCompileOptions: CompileOptions)  = this(None, Option(_reset))(moduleCompileOptions)
+    def this(_clock: Clock, _reset: Bool)(implicit moduleCompileOptions: CompileOptions) = this(Option(_clock), Option(_reset))(moduleCompileOptions)
+
+
+    override def _autoWrapPorts {
+      val alreadyBound =
+      if (!_ioPortBound()) {
+        chisel3.core.Binding.bind(io, chisel3.core.PortBinder(this), "Error: iodef")
+      }
+    }
+  }
   val Module = chisel3.core.Module
-  type Module = chisel3.core.Module
+  type Module = CompatibilityModule
 
   val printf = chisel3.core.printf
 

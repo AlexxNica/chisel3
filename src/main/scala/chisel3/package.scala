@@ -147,7 +147,7 @@ package object chisel3 {    // scalastyle:ignore package.object.name
   type SeqMem[T <: Data] = chisel3.core.SeqMem[T]
 
   val Module = chisel3.core.Module
-  type Module = chisel3.core.Module
+  type Module = chisel3.core.ImplicitModule
 
   val printf = chisel3.core.printf
 

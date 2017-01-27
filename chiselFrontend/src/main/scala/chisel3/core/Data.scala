@@ -283,7 +283,7 @@ object Wire {
     val x = Reg.makeType(chisel3.core.ExplicitCompileOptions.NotStrict, t, null.asInstanceOf[T], init)
 
     // Bind each element of x to being a Wire
-    Binding.bind(x, WireBinder(Builder.forcedModule), "Error: t")
+    Binding.bind(x, WireBinder(Builder.forcedUserModule), "Error: t")
 
     pushCommand(DefWire(sourceInfo, x))
     pushCommand(DefInvalid(sourceInfo, x.ref))
