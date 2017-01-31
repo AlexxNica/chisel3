@@ -29,20 +29,24 @@ case class RawParam(value: String) extends Param
   */
 abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param]) extends BaseModule {
   def io: Record
-  // The body of a BlackBox is empty, the real logic happens in firrtl/Emitter.scala
-  // Bypass standard clock, reset, io port declaration by flattening io
-  // TODO(twigg): ? Really, overrides are bad, should extend BaseModule....
-  override private[core] def ports = io.elements.toSeq
 
-  // Do not do reflective naming of internal signals, just name io
-  override private[core] def close(): this.type = {
+  private[core] override def ports: Seq[Data] = {
+    io.elements.toSeq.map(_._2)
+  }
+
+  private[core] override def generateComponent(): Component = {
+    require(!_closed, "Can't generate module more than once")
+    _closed = true
+
+    val namedPorts = io.elements.toSeq
     // setRef is not called on the actual io.
     // There is a risk of user improperly attempting to connect directly with io
     // Long term solution will be to define BlackBox IO differently as part of
     //   it not descending from the (current) Module
-    for ((name, port) <- ports) {
+    for ((name, port) <- namedPorts) {
       port.setRef(ModuleIO(this, _namespace.name(name)))
     }
+
     // We need to call forceName and onModuleClose on all of the sub-elements
     // of the io bundle, but NOT on the io bundle itself.
     // Doing so would cause the wrong names to be assigned, since their parent
@@ -51,6 +55,16 @@ abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param
       id.forceName(default="_T", _namespace)
       id._onModuleClose
     }
-    this
+
+    val firrtlPorts = for ((_, port) <- namedPorts) yield {
+      // Port definitions need to know input or output at top-level.
+      // By FIRRTL semantics, 'flipped' becomes an Input
+      val direction = if(Data.isFirrtlFlipped(port)) Direction.Input else Direction.Output
+      Port(port, direction)
+    }
+
+    val component = DefBlackBox(this, name, firrtlPorts, params)
+    _component = Some(component)
+    component
   }
 }

@@ -187,30 +187,4 @@ class CompileOptionsSpec extends ChiselFlatSpec {
     }
     elaborate { new DirectionLessConnectionModule() }
   }
-
-  "A Module with unwrapped IO when compiled with an explicit requireIOWrap false " should "not throw an exception" in {
-
-    object StrictNotIOWrap {
-
-      implicit object CompileOptions extends CompileOptions {
-        val connectFieldsMustMatch = true
-        val declaredTypeMustBeUnbound = true
-        val requireIOWrap = false
-        val dontTryConnectionsSwapped = true
-        val dontAssumeDirectionality = true
-        val deprecateOldDirectionMethods = false
-        val checkSynthesizable = true
-      }
-
-    }
-    class NotIOWrapModule extends Module()(StrictNotIOWrap.CompileOptions) {
-      val io = new Bundle {
-        val in = UInt(32.W).asInput
-        val out = Bool().asOutput
-      }
-    }
-    elaborate {
-      new NotIOWrapModule()
-    }
-  }
 }

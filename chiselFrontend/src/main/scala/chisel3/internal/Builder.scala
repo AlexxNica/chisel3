@@ -179,7 +179,7 @@ private[chisel3] object Builder {
   }
   def forcedUserModule: UserModule = currentModule match {
     case Some(module: UserModule) => module
-    case None => throwException(
+    case _ => throwException(
       "Error: Not in a UserModule. Likely cause: Missed Module() wrap, bare chisel API call, or attempting to construct hardware inside a BlackBox."
       // A bare api call is, e.g. calling Wire() from the scala console).
     )

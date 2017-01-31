@@ -171,11 +171,9 @@ package object Chisel {     // scalastyle:ignore package.object.name
     def this(_reset: Bool)(implicit moduleCompileOptions: CompileOptions)  = this(None, Option(_reset))(moduleCompileOptions)
     def this(_clock: Clock, _reset: Bool)(implicit moduleCompileOptions: CompileOptions) = this(Option(_clock), Option(_reset))(moduleCompileOptions)
 
-
-    override def _autoWrapPorts {
-      val alreadyBound =
+    override def _autoWrapPorts() = {
       if (!_ioPortBound()) {
-        chisel3.core.Binding.bind(io, chisel3.core.PortBinder(this), "Error: iodef")
+        IO(io)
       }
     }
   }
