@@ -238,6 +238,8 @@ abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
   }
 
   private[core] override def generateComponent(): Component = {
+    _autoWrapPorts()  // pre-IO(...) compatibility hack
+
     require(!_closed, "Can't generate module more than once")
     _closed = true
 
@@ -298,15 +300,6 @@ abstract class ImplicitModule(
   def io: Record
   val clock = IO(Input(Clock()))
   val reset = IO(Input(Bool()))
-
-  private[core] override def generateComponent(): Component = {
-    _autoWrapPorts()  // pre-IO(...) compatibility hack
-
-    // Ensure that io is properly bound
-    //require(_ioPortBound(), "Missing IO binding in $this")
-
-    super.generateComponent()
-  }
 
   private[core] def initializeInParent(externalClock: Option[Clock], externalReset: Option[Bool]) {
     // Don't generate source info referencing parents inside a module, since this interferes with

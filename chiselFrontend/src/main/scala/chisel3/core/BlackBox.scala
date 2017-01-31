@@ -31,6 +31,8 @@ abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param
   def io: Record
 
   private[core] override def generateComponent(): Component = {
+    _autoWrapPorts()  // pre-IO(...) compatibility hack
+
     require(!_closed, "Can't generate module more than once")
     _closed = true
 
