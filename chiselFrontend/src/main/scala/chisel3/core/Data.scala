@@ -139,7 +139,7 @@ abstract class Data extends HasId {
       Binding.checkSynthesizable(this, s"'this' ($this)")
       Binding.checkSynthesizable(that, s"'that' ($that)")
       try {
-        MonoConnect.connect(sourceInfo, connectCompileOptions, this, that, Builder.forcedModule)
+        MonoConnect.connect(sourceInfo, connectCompileOptions, this, that, Builder.forcedUserModule)
       } catch {
         case MonoConnect.MonoConnectException(message) =>
           throwException(
@@ -155,7 +155,7 @@ abstract class Data extends HasId {
       Binding.checkSynthesizable(this, s"'this' ($this)")
       Binding.checkSynthesizable(that, s"'that' ($that)")
       try {
-        BiConnect.connect(sourceInfo, connectCompileOptions, this, that, Builder.forcedModule)
+        BiConnect.connect(sourceInfo, connectCompileOptions, this, that, Builder.forcedUserModule)
       } catch {
         case BiConnect.BiConnectException(message) =>
           throwException(

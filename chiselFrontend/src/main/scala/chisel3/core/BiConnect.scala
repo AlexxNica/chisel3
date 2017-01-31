@@ -49,7 +49,7 @@ object BiConnect {
   * during the recursive decent and then rethrow them with extra information added.
   * This gives the user a 'path' to where in the connections things went wrong.
   */
-  def connect(sourceInfo: SourceInfo, connectCompileOptions: CompileOptions, left: Data, right: Data, context_mod: BaseModule): Unit =
+  def connect(sourceInfo: SourceInfo, connectCompileOptions: CompileOptions, left: Data, right: Data, context_mod: UserModule): Unit =
     (left, right) match {
       // Handle element case (root case)
       case (left_e: Element, right_e: Element) => {
@@ -109,7 +109,7 @@ object BiConnect {
 
   // This function checks if element-level connection operation allowed.
   // Then it either issues it or throws the appropriate exception.
-  def elemConnect(implicit sourceInfo: SourceInfo, connectCompileOptions: CompileOptions, left: Element, right: Element, context_mod: BaseModule): Unit = {
+  def elemConnect(implicit sourceInfo: SourceInfo, connectCompileOptions: CompileOptions, left: Element, right: Element, context_mod: UserModule): Unit = {
     import Direction.{Input, Output} // Using extensively so import these
     // If left or right have no location, assume in context module
     // This can occur if one of them is a literal, unbound will error previously
