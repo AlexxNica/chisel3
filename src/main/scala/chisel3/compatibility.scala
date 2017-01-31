@@ -152,8 +152,20 @@ package object Chisel {     // scalastyle:ignore package.object.name
   object Bool extends BoolFactory
   val Mux = chisel3.core.Mux
 
-  type BlackBox = chisel3.core.BlackBox
+  import chisel3.core.Param
+  abstract class BlackBox(params: Map[String, Param] = Map.empty[String, Param]) extends chisel3.core.BlackBox(params) {
+    var _ioDefined = false
+    override protected def IO[T<:Data](iodef: T): iodef.type = {
+      _ioDefined = true
+      super.IO(iodef)
+    }
 
+    override def _autoWrapPorts() = {
+      if (!_ioDefined) {
+        IO(io)
+      }
+    }
+  }
   val Mem = chisel3.core.Mem
   type MemBase[T <: Data] = chisel3.core.MemBase[T]
   type Mem[T <: Data] = chisel3.core.Mem[T]
