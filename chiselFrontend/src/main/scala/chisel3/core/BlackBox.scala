@@ -5,7 +5,7 @@ package chisel3.core
 import chisel3.internal.Builder.pushCommand
 import chisel3.internal.firrtl._
 import chisel3.internal.throwException
-import chisel3.internal.sourceinfo.SourceInfo
+import chisel3.internal.sourceinfo.{SourceInfo, UnlocatableSourceInfo}
 // TODO: remove this once we have CompileOptions threaded through the macro system.
 import chisel3.core.ExplicitCompileOptions.NotStrict
 
@@ -29,10 +29,6 @@ case class RawParam(value: String) extends Param
   */
 abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param]) extends BaseModule {
   def io: Record
-
-  private[core] override def ports: Seq[Data] = {
-    io.elements.toSeq.map(_._2)
-  }
 
   private[core] override def generateComponent(): Component = {
     require(!_closed, "Can't generate module more than once")
@@ -66,5 +62,14 @@ abstract class BlackBox(val params: Map[String, Param] = Map.empty[String, Param
     val component = DefBlackBox(this, name, firrtlPorts, params)
     _component = Some(component)
     component
+  }
+
+  private[core] def initializeInParent(externalClock: Option[Clock], externalReset: Option[Bool]) {
+    implicit val sourceInfo = UnlocatableSourceInfo
+
+    val namedPorts = io.elements.toSeq
+    for ((_, port) <- namedPorts) {
+      pushCommand(DefInvalid(sourceInfo, port.ref))
+    }
   }
 }

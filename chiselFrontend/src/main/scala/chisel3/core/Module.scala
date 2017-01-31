@@ -2,7 +2,7 @@
 
 package chisel3.core
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConversions._
 import scala.language.experimental.macros
 
@@ -47,19 +47,7 @@ object Module {
     // Handle connections at enclosing scope
     if(!Builder.currentModule.isEmpty) {
       pushCommand(DefInstance(sourceInfo, module, component.ports))
-
-      // Default child module ports to invalid and make implicit connections.
-      module match {
-        case module: ImplicitModule => {
-          pushCommand(DefInvalid(sourceInfo, module.io.ref))
-          module.connectClocks(Builder.getClock, Builder.getReset)
-        }
-        case module: BaseModule => {
-          for(port <- module.ports) {
-            pushCommand(DefInvalid(sourceInfo, port.ref))
-          }
-        }
-      }
+      module.initializeInParent(Builder.getClock, Builder.getReset)
     }
     module
   }
@@ -95,6 +83,10 @@ abstract class BaseModule extends HasId {
     */
   private[core] def generateComponent(): Component
 
+  /** Sets up this module in the parent context, given the implicit clock and reset signals.
+    */
+  private[core] def initializeInParent(externalClock: Option[Clock], externalReset: Option[Bool])
+
   //
   // Chisel Internals
   //
@@ -121,9 +113,6 @@ abstract class BaseModule extends HasId {
   protected def annotate(annotation: ChiselAnnotation): Unit = {
     Builder.annotations += annotation
   }
-
-  // Returns a list of ports of this module
-  private[core] def ports: Seq[Data]
 
   /**
    * This must wrap the datatype used to set the io field of any Module.
@@ -167,11 +156,7 @@ abstract class BaseModule extends HasId {
   */
 abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
     extends BaseModule {
-  private val _ports = new ArrayBuffer[Data]()
-
-  private[core] override def ports: Seq[Data] = {
-    _ports.toSeq
-  }
+  protected val _ports = new ArrayBuffer[Data]()
 
   /** Registers a Data as a port, also performing bindings. Cannot be called once ports are
     * requested (so that all calls to ports will return the same information)..
@@ -206,13 +191,13 @@ abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
     *
     * Helper method.
     */
-  protected def nameVals(): IdentityHashMap[HasId, String] = {
-    val names = new IdentityHashMap[HasId, String]()
+  protected def nameVals(): HashMap[HasId, String] = {
+    val names = new HashMap[HasId, String]()
 
     def name(node: HasId, name: String) {
       // First name takes priority, like suggestName
       // TODO: DRYify with suggestName
-      if (!names.containsKey(node)) {
+      if (!names.contains(node)) {
         names.put(node, name)
       }
     }
@@ -220,10 +205,7 @@ abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
     /** Recursively suggests names to supported "container" classes
       * Arbitrary nestings of supported classes are allowed so long as the
       * innermost element is of type HasId
-      * Currently supported:
-      *   - Iterable
-      *   - Option
-      * (Note that Map is Iterable[Tuple2[_,_]] and thus excluded)
+      * (Note: Map is Iterable[Tuple2[_,_]] and thus excluded)
       */
     def nameRecursively(prefix: String, nameMe: Any): Unit =
       nameMe match {
@@ -261,15 +243,20 @@ abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
 
     val names = nameVals()
 
-    print(s"$this => $names\r\n")
-
     // Ports get first naming priority, since they are part of a Module's IO spec
     for (port <- _ports) {
-      require(names.containsKey(port), s"Unable to name port $port in $this")
-      port.setRef(ModuleIO(this, _namespace.name(names.get(port))))
+      require(names.contains(port), s"Unable to name port $port in $this")
+      port.setRef(ModuleIO(this, _namespace.name(names(port))))
       // Initialize output as unused
       _commands.prepend(DefInvalid(UnlocatableSourceInfo, port.ref))
     }
+
+    val firrtlPorts = for (port <- _ports) yield {
+      // Port definitions need to know input or output at top-level. 'flipped' means Input.
+      val direction = if(Data.isFirrtlFlipped(port)) Direction.Input else Direction.Output
+      firrtl.Port(port, direction)
+    }
+    _firrtlPorts = Some(firrtlPorts)
 
     // Then everything else gets named
     for ((node, name) <- names) {
@@ -279,14 +266,6 @@ abstract class UserModule(implicit moduleCompileOptions: CompileOptions)
     // All suggestions are in, force names to every node.
     _ids.foreach(_.forceName(default="_T", _namespace))
     _ids.foreach(_._onModuleClose)
-
-    val firrtlPorts = for (port <- _ports) yield {
-      // Port definitions need to know input or output at top-level.
-      // By FIRRTL semantics, 'flipped' becomes an Input
-      val direction = if(Data.isFirrtlFlipped(port)) Direction.Input else Direction.Output
-      firrtl.Port(port, direction)
-    }
-    _firrtlPorts = Some(firrtlPorts)
 
     val component = DefModule(this, name, firrtlPorts, _commands)
     _component = Some(component)
@@ -311,7 +290,7 @@ abstract class ImplicitModule(
   def this(_clock: Clock, _reset: Bool)(implicit moduleCompileOptions: CompileOptions) = this(Option(_clock), Option(_reset))(moduleCompileOptions)
 
   // Allow access to bindings from the compatibility package
-  protected def _ioPortBound() = ports contains io
+  protected def _ioPortBound() = _ports contains io
 
   /** IO for this Module. At the Scala level (pre-FIRRTL transformations),
     * connections in and out of a Module may only go through `io` elements.
@@ -329,10 +308,12 @@ abstract class ImplicitModule(
     super.generateComponent()
   }
 
-  private[core] def connectClocks(externalClock: Option[Clock], externalReset: Option[Bool]) {
+  private[core] def initializeInParent(externalClock: Option[Clock], externalReset: Option[Bool]) {
     // Don't generate source info referencing parents inside a module, since this interferes with
     // module de-duplication in FIRRTL emission.
-    implicit val childSourceInfo = UnlocatableSourceInfo
+    implicit val sourceInfo = UnlocatableSourceInfo
+
+    pushCommand(DefInvalid(sourceInfo, io.ref))
 
     override_clock match {
       case Some(override_clock) => clock := override_clock

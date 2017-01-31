@@ -128,9 +128,9 @@ class PrintableSpec extends FlatSpec with Matchers {
   }
   it should "handle printing ports of submodules" in {
     class MySubModule extends Module {
-      val io = new Bundle {
+      val io = IO(new Bundle {
         val fizz = UInt(32.W)
-      }
+      })
     }
     class MyModule extends BasicTester {
       val myInst = Module(new MySubModule)
